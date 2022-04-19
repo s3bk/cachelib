@@ -24,14 +24,6 @@ Don't evict:
 **/
 
 use std::sync::{Arc};
-use std::hash::Hash;
-use std::collections::HashMap;
-use std::sync::Mutex;
-
-pub trait Cache<K, V> {
-    fn new() -> Self;
-    fn get(&self, key: K, compute: impl FnOnce() -> V) -> V;
-}
 
 #[cfg(feature="sync")]
 pub mod sync;
@@ -81,15 +73,4 @@ impl ValueSize for [u8] {
 pub trait CacheControl: Sync + Send + 'static {
     fn name(&self) -> Option<&str>;
     fn clean(&self, threshold: f32) -> (usize, f32);
-}
-
-impl<K, V> Cache<K, V> for Mutex<HashMap<K, V>>
-    where K: Eq + Hash, V: Clone
-{
-    fn new() -> Self {
-        Mutex::new(HashMap::new())
-    }
-    fn get(&self, key: K, compute: impl FnOnce() -> V) -> V {
-        self.lock().unwrap().entry(key).or_insert_with(compute).clone()
-    }
 }

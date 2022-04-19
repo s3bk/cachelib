@@ -3,7 +3,7 @@ use std::collections::hash_map::{HashMap, Entry};
 use std::hash::Hash;
 use std::mem::replace;
 use std::time::Instant;
-use super::{ValueSize, CacheControl, global::GlobalCache, Cache};
+use super::{ValueSize, CacheControl, global::GlobalCache};
 
 struct Computed<V> {
     value: V,
@@ -37,6 +37,9 @@ struct CacheInner<K, V> {
 impl<K, V> SyncCache<K, V> 
     where K: Hash + Eq + Clone + Send + 'static, V: Clone + ValueSize + Send + 'static,
 {
+    pub fn new() -> Arc<Self> {
+        Self::with_name(None)
+    }
     pub fn with_name(name: Option<String>) -> Arc<Self> {
         let cache = Arc::new(SyncCache {
             name,
@@ -148,15 +151,5 @@ impl<K, V> CacheInner<K, V> {
         self.size -= freed;
         self.last_clean_timestamp = self.time_counter;
         (self.size, time_sum)
-    }
-}
-impl<K, V> Cache<K, V> for Arc<SyncCache<K, V>>
-    where K: Eq + Hash + Send + Clone + 'static, V: Clone + ValueSize + Send + 'static
-{
-    fn new() -> Self {
-        SyncCache::with_name(None)
-    }
-    fn get(&self, key: K, compute: impl FnOnce() -> V) -> V {
-        (**self).get(key, compute)
     }
 }
