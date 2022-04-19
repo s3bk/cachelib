@@ -69,6 +69,15 @@ impl ValueSize for [u8] {
         self.len()
     }
 }
+impl<T: ValueSize> ValueSize for Option<T> {
+    #[inline]
+    fn size(&self) -> usize {
+        match *self {
+            None => 0,
+            Some(ref val) => val.size()
+        }
+    }
+}
 
 pub trait CacheControl: Sync + Send + 'static {
     fn name(&self) -> Option<&str>;
