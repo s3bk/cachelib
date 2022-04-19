@@ -42,6 +42,17 @@ pub mod r#async;
 #[cfg(feature="global")]
 pub mod global;
 
+#[cfg(not(feature="global"))]
+pub mod global {
+    use std::sync::Weak;
+    use super::CacheControl;
+
+    pub struct GlobalCache;
+    impl GlobalCache {
+        pub fn register(_: Weak<impl CacheControl>) {}
+    }
+}
+
 pub trait ValueSize {
     fn size(&self) -> usize;
 }
