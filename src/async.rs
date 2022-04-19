@@ -1,9 +1,11 @@
-use std::sync::{Mutex, Condvar, Arc, MutexGuard};
 use std::collections::hash_map::{HashMap, Entry};
 use std::hash::Hash;
 use std::mem::replace;
 use std::time::Instant;
-use super::{ValueSize, CacheControl, global::GlobalCache, Cache};
+use std::sync::Arc;
+use tokio::sync::{Notify, Mutex};
+use super::{ValueSize, CacheControl, global::GlobalCache};
+
 
 struct Computed<V> {
     value: V,
@@ -12,7 +14,7 @@ struct Computed<V> {
     last_used: u32,
 }
 enum Value<V> {
-    InProcess(Arc<Condvar>),
+    InProcess(Arc<Notify>),
     Computed(Computed<V>),
 }
 impl<V> Value<V> {
@@ -23,7 +25,7 @@ impl<V> Value<V> {
         }
     }
 }
-pub struct SyncCache<K, V> {
+pub struct AsyncCache<K, V> {
     name: Option<String>,
     inner: Mutex<CacheInner<K, V>>,
 }
@@ -34,12 +36,15 @@ struct CacheInner<K, V> {
     size: usize,
 }
 
-impl<K, V> SyncCache<K, V> 
-    where K: Hash + Eq + Clone + Send + 'static, V: Clone + ValueSize + Send + 'static,
+impl<K, V> AsyncCache<K, V> 
+    where K: Clone + Hash + Eq + Send + 'static, V: Clone + ValueSize + Send + 'static,
 {
+    pub fn new() -> Arc<Self> {
+        Self::with_name(None)
+    }
     pub fn with_name(name: Option<String>) -> Arc<Self> {
-        let cache = Arc::new(SyncCache {
-            name,
+        let cache = Arc::new(AsyncCache {
+            name: name.into(),
             inner: Mutex::new(CacheInner {
                 entries: HashMap::new(),
                 time_counter: 1,
@@ -50,21 +55,27 @@ impl<K, V> SyncCache<K, V>
         GlobalCache::register(Arc::downgrade(&cache));
         cache
     }
-    pub fn get(&self, key: K, compute: impl FnOnce() -> V) -> V {
-        let mut guard = self.inner.lock().unwrap();
+    pub fn entries(self) -> impl Iterator<Item=(K, V)> {
+        self.inner.into_inner()
+            .entries
+            .into_iter()
+            .map(|(k, v)| (k, v.unwrap()))
+    }
+    pub async fn get(&self, key: K, compute: impl FnOnce() -> V) -> V {
+        let mut guard = self.inner.lock().await;
         match guard.entries.entry(key) {
             Entry::Occupied(e) => match e.get() {
                 &Value::Computed(ref v) => return v.value.clone(),
                 &Value::InProcess(ref condvar) => {
                     let key = e.key().clone();
                     let condvar = condvar.clone();
-                    return Self::poll(key, guard, condvar);
+                    return self.poll(key, condvar).await;
                 }
             }
             Entry::Vacant(e) => {
                 let key = e.key().clone();
-                let condvar = Arc::new(Condvar::new());
-                e.insert(Value::InProcess(condvar));
+                let notify = Arc::new(Notify::new());
+                e.insert(Value::InProcess(notify));
                 drop(guard);
 
                 let start = Instant::now();
@@ -73,9 +84,8 @@ impl<K, V> SyncCache<K, V>
                 let duration = start.elapsed();
                 let value2 = value.clone();
                 let time = duration.as_secs_f32();
-                let mut guard = self.inner.lock().unwrap();
+                let mut guard = self.inner.lock().await;
 
-                guard.size += size;
                 let c = Computed {
                     value,
                     size,
@@ -85,23 +95,17 @@ impl<K, V> SyncCache<K, V>
                 let slot = guard.entries.get_mut(&key).unwrap();
                 let slot = replace(slot, Value::Computed(c));
                 match slot {
-                    Value::InProcess(ref condvar) => condvar.notify_all(),
+                    Value::InProcess(ref notify) => notify.notify_waiters(),
                     _ => unreachable!()
                 }
                 return value2;
             }
         }
     }
-    pub fn entries(self) -> impl Iterator<Item=(K, V)> {
-        self.inner.into_inner()
-            .unwrap()
-            .entries
-            .into_iter()
-            .map(|(k, v)| (k, v.unwrap()))
-    }
-    fn poll(key: K, mut guard: MutexGuard<CacheInner<K, V>>, condvar: Arc<Condvar>) -> V {
+    async fn poll(&self, key: K, notify: Arc<Notify>) -> V {
         loop {
-            guard = condvar.wait(guard).unwrap();
+            notify.notified().await;
+            let mut guard = self.inner.lock().await;
             let inner = &mut *guard;
             if let &mut Value::Computed(ref mut v) = inner.entries.get_mut(&key).unwrap() {
                 v.last_used = inner.time_counter;
@@ -111,20 +115,19 @@ impl<K, V> SyncCache<K, V>
     }
 }
 
-impl<K, V> CacheControl for SyncCache<K, V>
+impl<K, V> CacheControl for AsyncCache<K, V>
     where K: Eq + Hash + Send + 'static, V: Clone + ValueSize + Send + 'static
 {
     fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
     fn clean(&self, threshold: f32) -> (usize, f32) {
-        self.inner.lock().unwrap().clean(threshold)
+        self.inner.blocking_lock().clean(threshold)
     }
 }
 
 impl<K, V> CacheInner<K, V> {
     fn clean(&mut self, threshold: f32) -> (usize, f32) {
-        self.time_counter += 1;
         let t2 = threshold / self.time_counter.wrapping_sub(self.last_clean_timestamp) as f32;
         let mut freed = 0;
 
@@ -148,15 +151,5 @@ impl<K, V> CacheInner<K, V> {
         self.size -= freed;
         self.last_clean_timestamp = self.time_counter;
         (self.size, time_sum)
-    }
-}
-impl<K, V> Cache<K, V> for Arc<SyncCache<K, V>>
-    where K: Eq + Hash + Send + Clone + 'static, V: Clone + ValueSize + Send + 'static
-{
-    fn new() -> Self {
-        SyncCache::with_name(None)
-    }
-    fn get(&self, key: K, compute: impl FnOnce() -> V) -> V {
-        (**self).get(key, compute)
     }
 }

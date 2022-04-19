@@ -1,8 +1,16 @@
 [package]
 name = "cachelib"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+sync = ["global"]
+async = ["global", "tokio"]
+global = ["tokio", "tracing", "once_cell"]
+
 [dependencies]
+tokio = { version = "*", optional = true, features = ["sync", "rt", "time"] }
+tracing = { version = "*", optional = true }
+once_cell = { version = "*", optional = true }
