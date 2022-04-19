@@ -95,9 +95,9 @@ impl<K, V> SyncCache<K, V>
             }
         }
     }
-    pub fn entries(self) -> impl Iterator<Item=(K, V)> {
-        self.inner.into_inner()
-            .unwrap()
+    pub fn entries(arc: Arc<Self>) -> impl Iterator<Item=(K, V)> {
+        let cache = Arc::try_unwrap(arc).ok().unwrap();
+            cache.inner.into_inner().unwrap()
             .entries
             .into_iter()
             .map(|(k, v)| (k, v.unwrap()))
