@@ -45,6 +45,10 @@ pub mod global {
     }
 }
 
+pub trait CacheControl: Sync + Send + 'static {
+    fn name(&self) -> Option<&str>;
+    fn clean(&self, threshold: f32) -> (usize, f32);
+}
 pub trait ValueSize {
     fn size(&self) -> usize;
 }
@@ -78,8 +82,10 @@ impl<T: ValueSize> ValueSize for Option<T> {
         }
     }
 }
-
-pub trait CacheControl: Sync + Send + 'static {
-    fn name(&self) -> Option<&str>;
-    fn clean(&self, threshold: f32) -> (usize, f32);
+impl ValueSize for () {
+    #[inline]
+    fn size(&self) -> usize {
+        0
+    }
 }
+
