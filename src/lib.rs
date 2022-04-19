@@ -88,4 +88,9 @@ impl ValueSize for () {
         0
     }
 }
-
+impl ValueSize for String {
+    #[inline]
+    fn size(&self) -> usize {
+        self.capacity()
+    }
+}
