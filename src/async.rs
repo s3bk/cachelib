@@ -5,6 +5,7 @@ use std::time::Instant;
 use std::sync::Arc;
 use tokio::sync::{Notify, Mutex};
 use super::{ValueSize, CacheControl, global::GlobalCache};
+use std::future::{Future, ready};
 
 
 struct Computed<V> {
@@ -62,6 +63,13 @@ impl<K, V> AsyncCache<K, V>
             .map(|(k, v)| (k, v.unwrap()))
     }
     pub async fn get(&self, key: K, compute: impl FnOnce() -> V) -> V {
+        self.get_async(key, || ready(compute())).await
+    }
+    pub async fn get_async<F, C>(&self, key: K, compute: C) -> V
+    where
+        F: Future<Output=V>,
+        C: FnOnce() -> F
+    {
         let mut guard = self.inner.lock().await;
         match guard.entries.entry(key) {
             Entry::Occupied(e) => match e.get() {
@@ -79,7 +87,7 @@ impl<K, V> AsyncCache<K, V>
                 drop(guard);
 
                 let start = Instant::now();
-                let value = compute();
+                let value = compute().await;
                 let size = value.size();
                 let duration = start.elapsed();
                 let value2 = value.clone();
