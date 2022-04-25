@@ -14,3 +14,4 @@ global = ["tokio", "tracing", "once_cell"]
 tokio = { version = "*", optional = true, features = ["sync", "rt", "time"] }
 tracing = { version = "*", optional = true }
 once_cell = { version = "*", optional = true }
+async-trait = "*"

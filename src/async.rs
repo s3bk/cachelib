@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::{Notify, Mutex};
 use super::{ValueSize, CacheControl, global::GlobalCache};
 use std::future::{Future, ready};
-
+use async_trait::async_trait;
 
 struct Computed<V> {
     value: V,
@@ -123,13 +123,14 @@ impl<K, V> AsyncCache<K, V>
     }
 }
 
+#[async_trait]
 impl<K, V> CacheControl for AsyncCache<K, V>
     where K: Eq + Hash + Send + 'static, V: Clone + ValueSize + Send + 'static
 {
     fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
-    fn clean(&self, threshold: f32) -> (usize, f32) {
+    async fn clean(&self, threshold: f32) -> (usize, f32) {
         self.inner.blocking_lock().clean(threshold)
     }
 }

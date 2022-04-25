@@ -19,6 +19,7 @@ pub fn global_init() {
         let mut slots = vec![];
         let mut last_threshold = 0.0;
         let memory_limit = 1024 * 1024 * 1024;
+        let mut new_slots = vec![];
         loop {
             while let Ok(new) = rx.try_recv() {
                 slots.push(new);
@@ -26,17 +27,15 @@ pub fn global_init() {
 
             let mut total_size = 0;
             let mut total_time = 0.0;
-            slots.retain(|slot| {
-                match Weak::upgrade(slot) {
-                    None => false,
-                    Some(cache) => {
-                        let (size, time_sum) = cache.clean(last_threshold);
-                        total_size += size;
-                        total_time += time_sum;
-                        true
-                    }
+            for slot in slots.drain(..) {
+                if let Some(cache) = Weak::upgrade(&slot) {
+                    let (size, time_sum) = cache.clean(last_threshold).await;
+                    total_size += size;
+                    total_time += time_sum;
+                    new_slots.push(slot); // keep it
                 }
-            });
+            }
+            std::mem::swap(&mut slots, &mut new_slots);
 
             if total_size > 0 {
                 let value = total_time / total_size as f32;

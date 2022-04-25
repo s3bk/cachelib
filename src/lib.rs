@@ -24,6 +24,7 @@ Don't evict:
 **/
 
 use std::sync::{Arc};
+use async_trait::async_trait;
 
 #[cfg(feature="sync")]
 pub mod sync;
@@ -45,9 +46,10 @@ pub mod global {
     }
 }
 
+#[async_trait]
 pub trait CacheControl: Sync + Send + 'static {
     fn name(&self) -> Option<&str>;
-    fn clean(&self, threshold: f32) -> (usize, f32);
+    async fn clean(&self, threshold: f32) -> (usize, f32);
 }
 pub trait ValueSize {
     fn size(&self) -> usize;
