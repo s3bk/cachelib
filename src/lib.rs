@@ -49,7 +49,7 @@ pub mod global {
 #[async_trait]
 pub trait CacheControl: Sync + Send + 'static {
     fn name(&self) -> Option<&str>;
-    async fn clean(&self, threshold: f32) -> (usize, f32);
+    async fn clean(&self, threshold: f64) -> (usize, f64);
 }
 pub trait ValueSize {
     fn size(&self) -> usize;

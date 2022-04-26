@@ -8,9 +8,9 @@ use async_trait::async_trait;
 
 struct Computed<V> {
     value: V,
+    time: f64,
     size: usize,
-    time: f32,
-    last_used: u32,
+    last_used: Instant,
 }
 enum Value<V> {
     InProcess(Arc<Condvar>),
@@ -30,9 +30,6 @@ pub struct SyncCache<K, V> {
 }
 struct CacheInner<K, V> {
     entries: HashMap<K, Value<V>>,
-    time_counter: u32,
-    last_clean_timestamp: u32,
-    size: usize,
 }
 
 impl<K, V> SyncCache<K, V> 
@@ -46,9 +43,6 @@ impl<K, V> SyncCache<K, V>
             name,
             inner: Mutex::new(CacheInner {
                 entries: HashMap::new(),
-                time_counter: 1,
-                last_clean_timestamp: 0,
-                size: 0,
             })
         });
         GlobalCache::register(Arc::downgrade(&cache));
@@ -76,15 +70,15 @@ impl<K, V> SyncCache<K, V>
                 let size = value.size();
                 let duration = start.elapsed();
                 let value2 = value.clone();
-                let time = duration.as_secs_f32() + 0.0000001;
+                let time = duration.as_secs_f64() + 0.000001;
+                let last_used = Instant::now();
                 let mut guard = self.inner.lock().unwrap();
 
-                guard.size += size;
                 let c = Computed {
                     value,
                     size,
                     time,
-                    last_used: guard.time_counter
+                    last_used,
                 };
                 let slot = guard.entries.get_mut(&key).unwrap();
                 let slot = replace(slot, Value::Computed(c));
@@ -104,11 +98,12 @@ impl<K, V> SyncCache<K, V>
             .map(|(k, v)| (k, v.unwrap()))
     }
     fn poll(key: K, mut guard: MutexGuard<CacheInner<K, V>>, condvar: Arc<Condvar>) -> V {
+        let last_used = Instant::now();
         loop {
             guard = condvar.wait(guard).unwrap();
             let inner = &mut *guard;
             if let &mut Value::Computed(ref mut v) = inner.entries.get_mut(&key).unwrap() {
-                v.last_used = inner.time_counter;
+                v.last_used = last_used;
                 return v.value.clone();
             }
         }
@@ -122,36 +117,33 @@ impl<K, V> CacheControl for SyncCache<K, V>
     fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
-    async fn clean(&self, threshold: f32) -> (usize, f32) {
+    async fn clean(&self, threshold: f64) -> (usize, f64) {
         self.inner.lock().unwrap().clean(threshold)
     }
 }
 
 impl<K, V> CacheInner<K, V> {
-    fn clean(&mut self, threshold: f32) -> (usize, f32) {
-        self.time_counter += 1;
-        let t2 = threshold / self.time_counter.wrapping_sub(self.last_clean_timestamp) as f32;
-        let mut freed = 0;
+    fn clean(&mut self, threshold: f64) -> (usize, f64) {
+        let now = Instant::now();
+        let mut size_sum = 0;
 
         let mut time_sum = 0.0;
         self.entries.retain(|_, value| {
             match value {
                 Value::Computed(ref entry) => {
-                    let elapsed = self.time_counter.wrapping_sub(entry.last_used);
-                    let value = entry.time / (entry.size as f32 * elapsed as f32);
-                    if value > t2 {
+                    let elapsed = now.duration_since(entry.last_used);
+                    let value = entry.time / (entry.size as f64 * elapsed.as_secs_f64());
+                    if value > threshold {
                         time_sum += entry.time;
+                        size_sum += entry.size;
                         true
                     } else {
-                        freed += entry.size;
                         false
                     }
                 }
                 Value::InProcess(_) => true
             }
         });
-        self.size -= freed;
-        self.last_clean_timestamp = self.time_counter;
-        (self.size, time_sum)
+        (size_sum, time_sum)
     }
 }

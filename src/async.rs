@@ -11,8 +11,8 @@ use async_trait::async_trait;
 struct Computed<V> {
     value: V,
     size: usize,
-    time: f32,
-    last_used: u32,
+    time: f64,
+    last_used: Instant,
 }
 enum Value<V> {
     InProcess(Arc<Notify>),
@@ -32,9 +32,6 @@ pub struct AsyncCache<K, V> {
 }
 struct CacheInner<K, V> {
     entries: HashMap<K, Value<V>>,
-    time_counter: u32,
-    last_clean_timestamp: u32,
-    size: usize,
 }
 
 impl<K, V> AsyncCache<K, V> 
@@ -48,9 +45,6 @@ impl<K, V> AsyncCache<K, V>
             name: name.into(),
             inner: Mutex::new(CacheInner {
                 entries: HashMap::new(),
-                time_counter: 1,
-                last_clean_timestamp: 0,
-                size: 0,
             })
         });
         GlobalCache::register(Arc::downgrade(&cache));
@@ -71,14 +65,17 @@ impl<K, V> AsyncCache<K, V>
         C: FnOnce() -> F
     {
         let mut guard = self.inner.lock().await;
+        let key2 = key.clone();
         match guard.entries.entry(key) {
-            Entry::Occupied(e) => match e.get() {
-                &Value::Computed(ref v) => return v.value.clone(),
-                &Value::InProcess(ref condvar) => {
-                    let key = e.key().clone();
+            Entry::Occupied(mut e) => match e.get_mut() {
+                &mut Value::Computed(ref mut v) => {
+                    v.last_used = Instant::now();
+                    return v.value.clone()
+                }
+                &mut Value::InProcess(ref condvar) => {
                     let condvar = condvar.clone();
                     drop(guard);
-                    return self.poll(key, condvar).await;
+                    return self.poll(key2, condvar).await;
                 }
             }
             Entry::Vacant(e) => {
@@ -92,16 +89,15 @@ impl<K, V> AsyncCache<K, V>
                 let size = value.size();
                 let duration = start.elapsed();
                 let value2 = value.clone();
-                let time = duration.as_secs_f32() + 0.0000001;
+                let time = duration.as_secs_f64() + 0.000001;
                 let mut guard = self.inner.lock().await;
 
                 let c = Computed {
                     value,
                     size,
                     time,
-                    last_used: guard.time_counter
+                    last_used: start
                 };
-                guard.size += size;
                 let slot = guard.entries.get_mut(&key).unwrap();
                 let slot = replace(slot, Value::Computed(c));
                 match slot {
@@ -118,7 +114,7 @@ impl<K, V> AsyncCache<K, V>
             let mut guard = self.inner.lock().await;
             let inner = &mut *guard;
             if let &mut Value::Computed(ref mut v) = inner.entries.get_mut(&key).unwrap() {
-                v.last_used = inner.time_counter;
+                v.last_used = Instant::now();
                 return v.value.clone();
             }
         }
@@ -132,35 +128,33 @@ impl<K, V> CacheControl for AsyncCache<K, V>
     fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
-    async fn clean(&self, threshold: f32) -> (usize, f32) {
+    async fn clean(&self, threshold: f64) -> (usize, f64) {
         self.inner.lock().await.clean(threshold)
     }
 }
 
 impl<K, V> CacheInner<K, V> {
-    fn clean(&mut self, threshold: f32) -> (usize, f32) {
-        let t2 = threshold / self.time_counter.wrapping_sub(self.last_clean_timestamp) as f32;
-        let mut freed = 0;
+    fn clean(&mut self, threshold: f64) -> (usize, f64) {
+        let mut size_sum = 0;
+        let now = Instant::now();
 
         let mut time_sum = 0.0;
         self.entries.retain(|_, value| {
             match value {
                 Value::Computed(ref entry) => {
-                    let elapsed = self.time_counter.wrapping_sub(entry.last_used);
-                    let value = entry.time / (entry.size as f32 * elapsed as f32);
-                    if value > t2 {
+                    let elapsed = now.duration_since(entry.last_used);
+                    let value = entry.time / (entry.size as f64 * elapsed.as_secs_f64());
+                    if value > threshold {
                         time_sum += entry.time;
+                        size_sum += entry.size;
                         true
                     } else {
-                        freed += entry.size;
                         false
                     }
                 }
                 Value::InProcess(_) => true
             }
         });
-        self.size.checked_sub(freed).unwrap();
-        self.last_clean_timestamp = self.time_counter;
-        (self.size, time_sum)
+        (size_sum, time_sum)
     }
 }

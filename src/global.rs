@@ -31,7 +31,7 @@ pub fn global_cleaner() -> impl Future<Output=()> {
             }
 
             let mut total_size = 0;
-            let mut total_time = 0.0;
+            let mut total_time = 0.;
             for slot in slots.drain(..) {
                 if let Some(cache) = Weak::upgrade(&slot) {
                     let (size, time_sum) = cache.clean(last_threshold).await;
@@ -43,8 +43,8 @@ pub fn global_cleaner() -> impl Future<Output=()> {
             std::mem::swap(&mut slots, &mut new_slots);
 
             if total_size > 0 {
-                let value = total_time / total_size as f32;
-                let scale = total_size as f32 / memory_limit as f32;
+                let value = total_time / total_size as f64;
+                let scale = total_size as f64 / memory_limit as f64;
                 last_threshold = value * scale;
             } else {
                 last_threshold = 0.0;
