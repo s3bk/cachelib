@@ -76,7 +76,7 @@ impl<K, V> SyncCache<K, V>
                 let size = value.size();
                 let duration = start.elapsed();
                 let value2 = value.clone();
-                let time = duration.as_secs_f32();
+                let time = duration.as_secs_f32() + 0.0000001;
                 let mut guard = self.inner.lock().unwrap();
 
                 guard.size += size;

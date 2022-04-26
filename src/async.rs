@@ -1,9 +1,9 @@
 use std::collections::hash_map::{HashMap, Entry};
 use std::hash::Hash;
 use std::mem::replace;
-use std::time::Instant;
 use std::sync::Arc;
 use tokio::sync::{Notify, Mutex};
+use tokio::time::Instant;
 use super::{ValueSize, CacheControl, global::GlobalCache};
 use std::future::{Future, ready};
 use async_trait::async_trait;
@@ -92,7 +92,7 @@ impl<K, V> AsyncCache<K, V>
                 let size = value.size();
                 let duration = start.elapsed();
                 let value2 = value.clone();
-                let time = duration.as_secs_f32();
+                let time = duration.as_secs_f32() + 0.0000001;
                 let mut guard = self.inner.lock().await;
 
                 let c = Computed {
