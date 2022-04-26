@@ -100,6 +100,7 @@ impl<K, V> AsyncCache<K, V>
                     time,
                     last_used: guard.time_counter
                 };
+                guard.size += size;
                 let slot = guard.entries.get_mut(&key).unwrap();
                 let slot = replace(slot, Value::Computed(c));
                 match slot {
@@ -131,7 +132,7 @@ impl<K, V> CacheControl for AsyncCache<K, V>
         self.name.as_deref()
     }
     async fn clean(&self, threshold: f32) -> (usize, f32) {
-        self.inner.blocking_lock().clean(threshold)
+        self.inner.lock().await.clean(threshold)
     }
 }
 
@@ -157,7 +158,7 @@ impl<K, V> CacheInner<K, V> {
                 Value::InProcess(_) => true
             }
         });
-        self.size -= freed;
+        self.size.checked_sub(freed).unwrap();
         self.last_clean_timestamp = self.time_counter;
         (self.size, time_sum)
     }

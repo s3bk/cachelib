@@ -3,6 +3,7 @@ use tokio::sync::mpsc;
 use std::sync::Weak;
 use once_cell::sync::OnceCell;
 use super::CacheControl;
+use std::future::Future;
 
 pub struct GlobalCache {
     register: mpsc::UnboundedSender<Weak<dyn CacheControl>>,
@@ -10,12 +11,16 @@ pub struct GlobalCache {
 static GLOBAL: OnceCell<GlobalCache> = OnceCell::new();
 
 pub fn global_init() {
+    tokio::spawn(global_cleaner());
+}
+
+pub fn global_cleaner() -> impl Future<Output=()> {
     use tokio::time::{Duration, sleep};
 
     let (tx, mut rx) = mpsc::unbounded_channel();
     GlobalCache { register: tx }.make_global();
 
-    tokio::spawn(async move {
+    async move {
         let mut slots = vec![];
         let mut last_threshold = 0.0;
         let memory_limit = 1024 * 1024 * 1024;
@@ -46,11 +51,11 @@ pub fn global_init() {
             }
 
             info!("{} seconds cached in {} bytes", total_time, total_size);
-            info!("new threshold: {}", last_threshold);
+            //info!("new threshold: {}", last_threshold);
 
             sleep(Duration::from_secs(1)).await;
         }
-    });
+    }
 }
 
 impl GlobalCache {
