@@ -77,6 +77,7 @@ impl<K, V> AsyncCache<K, V>
                 &Value::InProcess(ref condvar) => {
                     let key = e.key().clone();
                     let condvar = condvar.clone();
+                    drop(guard);
                     return self.poll(key, condvar).await;
                 }
             }
