@@ -3,7 +3,7 @@ use std::hash::Hash;
 use std::mem::replace;
 use std::sync::Arc;
 use tokio::sync::{Notify, Mutex};
-use tokio::time::Instant;
+use tokio::time::{Instant, Duration};
 use super::{ValueSize, CacheControl, global::GlobalCache};
 use std::future::{Future, ready};
 use async_trait::async_trait;
@@ -128,15 +128,15 @@ impl<K, V> CacheControl for AsyncCache<K, V>
     fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
-    async fn clean(&self, threshold: f64) -> (usize, f64) {
-        self.inner.lock().await.clean(threshold)
+    async fn clean(&self, threshold: f64, time_scale: f64) -> (usize, f64) {
+        self.inner.lock().await.clean(threshold, time_scale)
     }
 }
 
 impl<K, V> CacheInner<K, V> {
-    fn clean(&mut self, threshold: f64) -> (usize, f64) {
+    fn clean(&mut self, threshold: f64, time_scale: f64) -> (usize, f64) {
         let mut size_sum = 0;
-        let now = Instant::now();
+        let now = Instant::now() + Duration::from_secs_f64(time_scale);
 
         let mut time_sum = 0.0;
         self.entries.retain(|_, value| {

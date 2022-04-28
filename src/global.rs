@@ -10,11 +10,19 @@ pub struct GlobalCache {
 }
 static GLOBAL: OnceCell<GlobalCache> = OnceCell::new();
 
-pub fn global_init() {
-    tokio::spawn(global_cleaner());
+pub fn global_init(config: CacheConfig) {
+    tokio::spawn(global_cleaner(config));
 }
 
-pub fn global_cleaner() -> impl Future<Output=()> {
+pub struct CacheConfig {
+    //// memory limit in bytes
+    pub memory_limit: usize,
+
+    /// time scale in seconds
+    pub time_scale: f64,
+}
+
+pub fn global_cleaner(config: CacheConfig) -> impl Future<Output=()> {
     use tokio::time::{Duration, sleep};
 
     let (tx, mut rx) = mpsc::unbounded_channel();
@@ -23,7 +31,6 @@ pub fn global_cleaner() -> impl Future<Output=()> {
     async move {
         let mut slots = vec![];
         let mut last_threshold = 0.0;
-        let memory_limit = 1024 * 1024 * 1024;
         let mut new_slots = vec![];
         loop {
             while let Ok(new) = rx.try_recv() {
@@ -34,7 +41,7 @@ pub fn global_cleaner() -> impl Future<Output=()> {
             let mut total_time = 0.;
             for slot in slots.drain(..) {
                 if let Some(cache) = Weak::upgrade(&slot) {
-                    let (size, time_sum) = cache.clean(last_threshold).await;
+                    let (size, time_sum) = cache.clean(last_threshold, config.time_scale).await;
                     total_size += size;
                     total_time += time_sum;
                     new_slots.push(slot); // keep it
@@ -43,8 +50,8 @@ pub fn global_cleaner() -> impl Future<Output=()> {
             std::mem::swap(&mut slots, &mut new_slots);
 
             if total_size > 0 {
-                let value = total_time / total_size as f64;
-                let scale = total_size as f64 / memory_limit as f64;
+                let value = total_time / (total_size as f64 * config.time_scale);
+                let scale = total_size as f64 / config.memory_limit as f64;
                 last_threshold = value * scale;
             } else {
                 last_threshold = 0.0;

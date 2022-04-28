@@ -2,7 +2,7 @@ use std::sync::{Mutex, Condvar, Arc, MutexGuard};
 use std::collections::hash_map::{HashMap, Entry};
 use std::hash::Hash;
 use std::mem::replace;
-use std::time::Instant;
+use std::time::{Instant, Duration};
 use super::{ValueSize, CacheControl, global::GlobalCache};
 use async_trait::async_trait;
 
@@ -117,14 +117,14 @@ impl<K, V> CacheControl for SyncCache<K, V>
     fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
-    async fn clean(&self, threshold: f64) -> (usize, f64) {
-        self.inner.lock().unwrap().clean(threshold)
+    async fn clean(&self, threshold: f64, time_scale: f64) -> (usize, f64) {
+        self.inner.lock().unwrap().clean(threshold, time_scale)
     }
 }
 
 impl<K, V> CacheInner<K, V> {
-    fn clean(&mut self, threshold: f64) -> (usize, f64) {
-        let now = Instant::now();
+    fn clean(&mut self, threshold: f64, time_scale: f64) -> (usize, f64) {
+        let now = Instant::now() + Duration::from_secs_f64(time_scale);
         let mut size_sum = 0;
 
         let mut time_sum = 0.0;
