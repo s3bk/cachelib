@@ -73,6 +73,8 @@ impl GlobalCache {
         GLOBAL.set(self).ok().expect("");
     }
     pub fn register(cache: Weak<impl CacheControl>) {
-        GLOBAL.get().unwrap().register.send(cache as _).ok().unwrap();
+        if let Some(global) = GLOBAL.get() {
+            global.register.send(cache as _).ok().unwrap();
+        }
     }
 }
