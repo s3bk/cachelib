@@ -1,4 +1,4 @@
-use tracing::info;
+use tracing::debug;
 use tokio::sync::mpsc;
 use std::sync::Weak;
 use once_cell::sync::OnceCell;
@@ -57,7 +57,7 @@ pub fn global_cleaner(config: CacheConfig) -> impl Future<Output=()> {
                 last_threshold = 0.0;
             }
 
-            info!("{} seconds cached in {} bytes", total_time, total_size);
+            debug!("{} seconds cached in {} bytes", total_time, total_size);
             //info!("new threshold: {}", last_threshold);
 
             sleep(Duration::from_secs(1)).await;
