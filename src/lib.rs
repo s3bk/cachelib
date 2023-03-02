@@ -96,3 +96,23 @@ impl ValueSize for String {
         self.capacity()
     }
 }
+macro_rules! primitive_impl {
+    ($t:ty) => (
+        impl ValueSize for $t {
+            #[inline]
+            fn size(&self) -> usize {
+                std::mem::size_of<$t>()
+            }
+        }
+    )
+}
+primitive_impl!(u8);
+primitive_impl!(i8);
+primitive_impl!(u16);
+primitive_impl!(i16);
+primitive_impl!(u32);
+primitive_impl!(i32);
+primitive_impl!(u64);
+primitive_impl!(i64);
+primitive_impl!(usize);
+primitive_impl!(isize);
