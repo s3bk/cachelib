@@ -101,7 +101,7 @@ macro_rules! primitive_impl {
         impl ValueSize for $t {
             #[inline]
             fn size(&self) -> usize {
-                std::mem::size_of<$t>()
+                std::mem::size_of::<$t>()
             }
         }
     )
