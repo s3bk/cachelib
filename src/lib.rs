@@ -25,6 +25,7 @@ Don't evict:
 
 use std::sync::{Arc};
 use async_trait::async_trait;
+use tuple::impl_tuple;
 
 #[cfg(feature="sync")]
 pub mod sync;
@@ -116,3 +117,15 @@ primitive_impl!(u64);
 primitive_impl!(i64);
 primitive_impl!(usize);
 primitive_impl!(isize);
+
+macro_rules! tuple_impl {
+    ($($Tuple:ident $Arr:ident { $($T:ident . $t:ident . $idx:tt),* } )*) => ($(
+        impl<$($T:ValueSize),*> ValueSize for ($($T,)*) {
+            #[inline]
+            fn size(&self) -> usize {
+                0 $(+ ValueSize::size(&self.$idx))*
+            }
+        }
+    )*)
+}
+impl_tuple!(tuple_impl);
