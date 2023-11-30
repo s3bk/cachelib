@@ -24,10 +24,12 @@ impl<V> Value<V> {
         }
     }
 }
+#[derive(Default)]
 pub struct SyncCache<K, V> {
     name: Option<String>,
     inner: Mutex<CacheInner<K, V>>,
 }
+#[derive(Default)]
 struct CacheInner<K, V> {
     entries: HashMap<K, Value<V>>,
 }
