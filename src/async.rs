@@ -121,6 +121,9 @@ impl<K, V> AsyncCache<K, V>
             }
         }
     }
+    pub async fn clear(&self) {
+        self.inner.lock().await.entries.clear()
+    }
 }
 
 #[async_trait]

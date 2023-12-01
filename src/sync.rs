@@ -99,6 +99,9 @@ impl<K, V> SyncCache<K, V>
             .into_iter()
             .map(|(k, v)| (k, v.unwrap()))
     }
+    pub fn clear(&self) {
+        self.inner.lock().unwrap().entries.clear()
+    }
     fn poll(key: K, mut guard: MutexGuard<CacheInner<K, V>>, condvar: Arc<Condvar>) -> V {
         let last_used = Instant::now();
         loop {
