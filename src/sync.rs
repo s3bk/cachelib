@@ -2,7 +2,7 @@ use std::sync::{Mutex, Condvar, Arc, MutexGuard};
 use std::collections::hash_map::{HashMap, Entry};
 use std::hash::Hash;
 use std::mem::replace;
-use std::time::{Instant, Duration};
+use web_time::{Instant, Duration};
 use super::{ValueSize, CacheControl, global::GlobalCache};
 use async_trait::async_trait;
 
