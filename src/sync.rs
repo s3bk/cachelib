@@ -99,6 +99,10 @@ impl<K, V> SyncCache<K, V>
             .into_iter()
             .map(|(k, v)| (k, v.unwrap()))
     }
+    pub fn remove(&self, key: &K) {
+        self.inner.lock().unwrap().entries.remove(key);
+    }
+
     pub fn clear(&self) {
         self.inner.lock().unwrap().entries.clear()
     }

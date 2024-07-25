@@ -1,6 +1,6 @@
 [package]
 name = "globalcache"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 description = "Cache utility that allows per-process managent of many cache instances"
 license = "MIT"

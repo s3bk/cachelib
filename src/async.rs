@@ -121,6 +121,9 @@ impl<K, V> AsyncCache<K, V>
             }
         }
     }
+    pub async fn remove(&self, key: &K) {
+        self.inner.lock().await.entries.remove(key);
+    }
     pub async fn clear(&self) {
         self.inner.lock().await.entries.clear()
     }
