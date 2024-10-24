@@ -1,10 +1,11 @@
 use std::sync::{Mutex, Condvar, Arc, MutexGuard};
-use std::collections::hash_map::{HashMap, Entry};
+use std::collections::hash_map::{Entry};
 use std::hash::Hash;
 use std::mem::replace;
 use web_time::{Instant, Duration};
 use super::{ValueSize, CacheControl, global::GlobalCache};
 use async_trait::async_trait;
+use rustc_hash::FxHashMap as HashMap;
 
 struct Computed<V> {
     value: V,
@@ -44,13 +45,13 @@ impl<K, V> SyncCache<K, V>
         let cache = Arc::new(SyncCache {
             name,
             inner: Mutex::new(CacheInner {
-                entries: HashMap::new(),
+                entries: HashMap::default(),
             })
         });
         GlobalCache::register(Arc::downgrade(&cache));
         cache
     }
-    pub fn get(&self, key: K, compute: impl FnOnce() -> V) -> V {
+    pub fn get(&self, key: K, compute: impl FnOnce(&K) -> V) -> V {
         let mut guard = self.inner.lock().unwrap();
         match guard.entries.entry(key) {
             Entry::Occupied(e) => match e.get() {
@@ -68,7 +69,7 @@ impl<K, V> SyncCache<K, V>
                 drop(guard);
 
                 let start = Instant::now();
-                let value = compute();
+                let value = compute(&key);
                 let size = value.size();
                 let duration = start.elapsed();
                 let value2 = value.clone();

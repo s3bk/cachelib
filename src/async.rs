@@ -58,13 +58,13 @@ impl<K, V> AsyncCache<K, V>
             .into_iter()
             .map(|(k, v)| (k, v.unwrap()))
     }
-    pub async fn get(&self, key: K, compute: impl FnOnce() -> V) -> V {
-        self.get_async(key, || ready(compute())).await
+    pub async fn get(&self, key: K, compute: impl FnOnce(&K) -> V) -> V {
+        self.get_async(key, |key| ready(compute(key))).await
     }
     pub async fn get_async<F, C>(&self, key: K, compute: C) -> V
     where
         F: Future<Output=V>,
-        C: FnOnce() -> F
+        C: FnOnce(&K) -> F
     {
         let mut guard = self.inner.lock().await;
         let key2 = key.clone();
@@ -87,7 +87,7 @@ impl<K, V> AsyncCache<K, V>
                 drop(guard);
 
                 let start = Instant::now();
-                let value = compute().await;
+                let value = compute(&key).await;
                 let size = value.size();
                 let duration = start.elapsed();
                 let value2 = value.clone();
