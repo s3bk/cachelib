@@ -26,12 +26,11 @@ impl<V> Value<V> {
         }
     }
 }
-#[derive(Default)]
+
 pub struct AsyncCache<K, V> {
     name: Option<String>,
     inner: Mutex<CacheInner<K, V>>,
 }
-#[derive(Default)]
 struct CacheInner<K, V> {
     entries: HashMap<K, Value<V>>,
 }
@@ -61,10 +60,10 @@ impl<K, V> AsyncCache<K, V>
     pub async fn get(&self, key: K, compute: impl FnOnce(&K) -> V) -> V {
         self.get_async(key, |key| ready(compute(key))).await
     }
-    pub async fn get_async<F, C>(&self, key: K, compute: C) -> V
+    pub async fn get_async<'a, F, C>(&self, key: K, compute: C) -> V
     where
-        F: Future<Output=V>,
-        C: FnOnce(&K) -> F
+        F: Future<Output=V> + 'a,
+        C: FnOnce(&'a K) -> F
     {
         let mut guard = self.inner.lock().await;
         let key2 = key.clone();
